@@ -77,7 +77,7 @@ auto mrc::link_shader(
     ShaderHandle const& vertex_shader,
     ShaderHandle const& fragment_shader) -> mrc::ProgramHandle
 {
-    ProgramHandle program{glCreateProgram()};
+    ProgramHandle program;
     glAttachShader(program, fragment_shader);
     glAttachShader(program, vertex_shader);
     glLinkProgram(program);
@@ -105,7 +105,7 @@ mrc::Program::Program(ProgramHandle&& opaque_shader, ProgramHandle&& alpha_shade
 }
 
 mrc::GLProgramFactory::GLProgramFactory()
-    : vertex_shader{compile_shader(GL_VERTEX_SHADER, vertex_shader_src)}
+    : vertex_shader{ShaderHandle::adopt(compile_shader(GL_VERTEX_SHADER, vertex_shader_src))}
 {
 }
 
@@ -166,9 +166,9 @@ auto mrc::GLProgramFactory::compile_fragment_shader(
     std::lock_guard lock{compilation_mutex};
 
     ShaderHandle const opaque_shader{
-        compile_shader(GL_FRAGMENT_SHADER, opaque_fragment.str().c_str())};
+        ShaderHandle::adopt(compile_shader(GL_FRAGMENT_SHADER, opaque_fragment.str().c_str()))};
     ShaderHandle const alpha_shader{
-        compile_shader(GL_FRAGMENT_SHADER, alpha_fragment.str().c_str())};
+        ShaderHandle::adopt(compile_shader(GL_FRAGMENT_SHADER, alpha_fragment.str().c_str()))};
 
     programs.emplace_back(id, std::make_unique<Program>(
         link_shader(vertex_shader, opaque_shader),

@@ -66,7 +66,8 @@ auto compile_program(GLchar const* src) -> mrc::ProgramHandle
         "   v_texcoord = texcoord;\n"
         "}\n";
 
-    mrc::ShaderHandle const vertex_shader{mrc::compile_shader(GL_VERTEX_SHADER, vertex_src)};
+    mrc::ShaderHandle const vertex_shader{
+        mrc::ShaderHandle::adopt(mrc::compile_shader(GL_VERTEX_SHADER, vertex_src))};
 
     std::stringstream fragment_src;
     fragment_src
@@ -84,30 +85,28 @@ auto compile_program(GLchar const* src) -> mrc::ProgramHandle
         "}\n";
 
     mrc::ShaderHandle const fragment_shader{
-        mrc::compile_shader(GL_FRAGMENT_SHADER, fragment_src.str().c_str())};
+        mrc::ShaderHandle::adopt(mrc::compile_shader(GL_FRAGMENT_SHADER, fragment_src.str().c_str()))};
 
     return mrc::link_shader(vertex_shader, fragment_shader);
 }
 
 auto make_texture() -> mrc::TextureHandle
 {
-    GLuint tex{0};
-    glGenTextures(1, &tex);
+    mrc::TextureHandle tex;
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, tex);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-    return mrc::TextureHandle{tex};
+    return tex;
 }
 
 auto make_framebuffer(GLuint tex) -> mrc::FramebufferHandle
 {
-    GLuint fb{0};
-    glGenFramebuffers(1, &fb);
+    mrc::FramebufferHandle fb;
     glBindFramebuffer(GL_FRAMEBUFFER, fb);
     glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, tex, 0);
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
-    return mrc::FramebufferHandle{fb};
+    return fb;
 }
 }
 

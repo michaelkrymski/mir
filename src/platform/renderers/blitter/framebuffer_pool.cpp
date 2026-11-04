@@ -36,23 +36,6 @@ namespace mgc = mir::graphics::common;
 namespace mrb = mir::renderer::blitter;
 namespace mrc = mir::renderer::common;
 
-namespace
-{
-auto make_texture() -> mrc::TextureHandle
-{
-    GLuint tex = 0;
-    glGenTextures(1, &tex);
-    return mrc::TextureHandle{tex};
-}
-
-auto make_framebuffer() -> mrc::FramebufferHandle
-{
-    GLuint fb = 0;
-    glGenFramebuffers(1, &fb);
-    return mrc::FramebufferHandle{fb};
-}
-}
-
 class mrb::FramebufferPool::Entry
 {
 public:
@@ -76,8 +59,9 @@ private:
 
     std::shared_ptr<SoftwareEGLContext> const context;
     std::unique_ptr<mg::CPUAddressableDisplayAllocator::MappableFB> const fb;
-    mrc::TextureHandle texture;
-    mrc::FramebufferHandle fbo;
+    // Allocate only after making our context current in build_gl_resources().
+    mrc::TextureHandle texture{mrc::TextureHandle::adopt(0)};
+    mrc::FramebufferHandle fbo{mrc::FramebufferHandle::adopt(0)};
 
 public:
     /// The blitter's handle to this framebuffer; empty while a Task holds it
@@ -125,7 +109,7 @@ void mrb::FramebufferPool::Entry::build_gl_resources()
     // is an EGLImage sibling we can throw the image away without freeing the dma-buf.
     auto const image = mg::import_dmabuf_to_egl_image(dpy, extensions, *dmabuf);
 
-    texture = make_texture();
+    texture = mrc::TextureHandle{};
     glBindTexture(GL_TEXTURE_2D, texture);
     extensions.base(dpy).glEGLImageTargetTexture2DOES(GL_TEXTURE_2D, image);
     extensions.base(dpy).eglDestroyImageKHR(dpy, image);
@@ -135,7 +119,7 @@ void mrb::FramebufferPool::Entry::build_gl_resources()
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
 
-    fbo = make_framebuffer();
+    fbo = mrc::FramebufferHandle{};
     glBindFramebuffer(GL_FRAMEBUFFER, fbo);
     glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, texture, 0);
 
@@ -166,8 +150,8 @@ mrb::FramebufferPool::Entry::~Entry()
 
 void mrb::FramebufferPool::Entry::release_gl_resources()
 {
-    fbo = mrc::FramebufferHandle{};
-    texture = mrc::TextureHandle{};
+    fbo.reset();
+    texture.reset();
 }
 
 void mrb::FramebufferPool::Entry::bind()

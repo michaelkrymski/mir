@@ -14,6 +14,8 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
+#include "common/gl_handles.h"
+
 #include <GLES2/gl2.h>
 #include <GLES2/gl2ext.h>
 
@@ -37,48 +39,8 @@ namespace geom = mir::geometry;
 
 namespace
 {
-template<void (*allocator)(GLsizei, GLuint*), void (* deleter)(GLsizei, GLuint const*)>
-class GLHandle
-{
-public:
-    GLHandle()
-    {
-        (*allocator)(1, &id);
-    }
-
-    ~GLHandle()
-    {
-        if (id)
-            (*deleter)(1, &id);
-    }
-
-    GLHandle(GLHandle const&) = delete;
-    GLHandle& operator=(GLHandle const&) = delete;
-
-    void reset()
-    {
-        if (id)
-            (*deleter)(1, &id);
-        id = 0;
-    }
-
-    GLHandle(GLHandle&& from)
-        : id{from.id}
-    {
-        from.id = 0;
-    }
-
-    operator GLuint() const
-    {
-        return id;
-    }
-
-private:
-    GLuint id{0};
-};
-
-using RenderbufferHandle = GLHandle<&glGenRenderbuffers, &glDeleteRenderbuffers>;
-using FramebufferHandle = GLHandle<&glGenFramebuffers, &glDeleteFramebuffers>;
+using mir::renderer::common::RenderbufferHandle;
+using mir::renderer::common::FramebufferHandle;
 
 auto create_current_context(EGLDisplay dpy, EGLContext share_ctx)
     -> EGLContext
