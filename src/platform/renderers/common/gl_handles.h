@@ -18,43 +18,60 @@
 #define MIR_RENDERER_COMMON_GL_HANDLES_H_
 
 #include <GLES2/gl2.h>
+#include <type_traits>
 #include <utility>
 
 namespace mir::renderer::common
 {
 
-/// Owning handle for GL objects deleted one-at-a-time (shaders, programs)
-template<void (* deleter)(GLuint)>
+/// Resource supplies allocate(args...) and release(GLuint). A GL context must be current when either is called.
+template<typename Resource>
 class GLHandle
 {
 public:
-    GLHandle() = default;
+    GLHandle() requires requires { Resource::allocate(); }
+        : id{Resource::allocate()}
+    {
+    }
 
-    explicit GLHandle(GLuint id)
-        : id{id}
+    template<typename... Args>
+        requires (sizeof...(Args) > 0 &&
+                  (!std::is_same_v<GLHandle, std::remove_cvref_t<Args>> && ...) &&
+                  requires(Args&&... args) { Resource::allocate(std::forward<Args>(args)...); })
+    explicit GLHandle(Args&&... args)
+        : id{Resource::allocate(std::forward<Args>(args)...)}
     {
     }
 
     ~GLHandle()
     {
-        if (id)
-            (*deleter)(id);
+        reset();
     }
 
     GLHandle(GLHandle const&) = delete;
 
     GLHandle& operator=(GLHandle const&) = delete;
 
-    GLHandle(GLHandle&& from)
-        : id{from.id}
+    GLHandle(GLHandle&& from) noexcept
+        : id{std::exchange(from.id, 0)}
     {
-        from.id = 0;
     }
 
-    GLHandle& operator=(GLHandle&& from)
+    GLHandle& operator=(GLHandle&& from) noexcept
     {
         std::swap(id, from.id);
         return *this;
+    }
+
+    static auto adopt(GLuint id) -> GLHandle
+    {
+        return GLHandle{Adopt{}, id};
+    }
+
+    void reset()
+    {
+        if (id)
+            Resource::release(std::exchange(id, 0));
     }
 
     operator GLuint() const
@@ -63,57 +80,69 @@ public:
     }
 
 private:
-    GLuint id{0};
-};
+    struct Adopt {};
 
-using ProgramHandle = GLHandle<&glDeleteProgram>;
-using ShaderHandle = GLHandle<&glDeleteShader>;
-
-/// Owning handle for GL objects deleted in batches (textures, framebuffers, renderbuffers)
-template<void (* deleter)(GLsizei, const GLuint*)>
-class GLMultiHandle
-{
-public:
-    GLMultiHandle() = default;
-
-    explicit GLMultiHandle(GLuint id)
+    GLHandle(Adopt, GLuint id)
         : id{id}
     {
     }
 
-    ~GLMultiHandle()
+    GLuint id;
+};
+
+struct ProgramResource
+{
+    static auto allocate() -> GLuint
     {
-        if (id)
-            (*deleter)(1, &id);
+        return glCreateProgram();
     }
 
-    GLMultiHandle(GLMultiHandle const&) = delete;
-
-    GLMultiHandle& operator=(GLMultiHandle const&) = delete;
-
-    GLMultiHandle(GLMultiHandle&& from)
-        : id{from.id}
+    static void release(GLuint id)
     {
-        from.id = 0;
+        glDeleteProgram(id);
+    }
+};
+
+struct ShaderResource
+{
+    static auto allocate(GLenum type) -> GLuint
+    {
+        return glCreateShader(type);
     }
 
-    GLMultiHandle& operator=(GLMultiHandle&& from)
+    static void release(GLuint id)
     {
-        std::swap(id, from.id);
-        return *this;
+        glDeleteShader(id);
     }
+};
 
-    operator GLuint() const
+template<void (*allocator)(GLsizei, GLuint*), void (*deleter)(GLsizei, GLuint const*)>
+struct GLBulkResource
+{
+    static auto allocate() -> GLuint
     {
+        GLuint id{0};
+        allocator(1, &id);
         return id;
     }
 
-private:
-    GLuint id{0};
+    static void release(GLuint id)
+    {
+        deleter(1, &id);
+    }
 };
 
-using TextureHandle = GLMultiHandle<&glDeleteTextures>;
-using FramebufferHandle = GLMultiHandle<&glDeleteFramebuffers>;
+using TextureResource = GLBulkResource<&glGenTextures, &glDeleteTextures>;
+using BufferResource = GLBulkResource<&glGenBuffers, &glDeleteBuffers>;
+using RenderbufferResource = GLBulkResource<&glGenRenderbuffers, &glDeleteRenderbuffers>;
+using FramebufferResource = GLBulkResource<&glGenFramebuffers, &glDeleteFramebuffers>;
+
+using ProgramHandle = GLHandle<ProgramResource>;
+using ShaderHandle = GLHandle<ShaderResource>;
+using TextureHandle = GLHandle<TextureResource>;
+using GLBufferHandle = GLHandle<BufferResource>;
+using RenderbufferHandle = GLHandle<RenderbufferResource>;
+using FramebufferHandle = GLHandle<FramebufferResource>;
 
 }
 
